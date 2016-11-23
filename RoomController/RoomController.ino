@@ -45,7 +45,7 @@ typedef struct
   boolean stateGA2;   // State GA2
   boolean stateGA3;   // State GA3
   long updated;       // Timestamp of last update
-} buttonStruct ;
+} BlindControl ;
 
 // Struct definition of a reed record.
 typedef struct
@@ -68,7 +68,7 @@ START array definitions
 *****************************************************************************************************************/
 
 // Button defintions arcording the buttton structure
-buttonStruct buttons[] = {
+BlindControl blinds[] = {
   {1, 46 , 1, "0/4/0", "0/0/2", "0/0/3", "",      0, 0, 0, 0},
   {2, 47 , 1, "0/0/1", "0/0/2", "0/0/3", "",      0, 0, 0, 0},
   {3, 48,  2, "0/0/1", "0/0/2", "0/0/3", "3/3/3", 0, 0, 0, 0},
@@ -107,10 +107,10 @@ OneWire ds(2);  // on digital pin 2
 
 
 // Instantiate button objects for clickButton library, which is necessary for each defined button
-ClickButton Button1(buttons[0].pin, LOW, CLICKBTN_PULLUP);
-ClickButton Button2(buttons[1].pin, LOW, CLICKBTN_PULLUP);
-ClickButton Button3(buttons[2].pin, LOW, CLICKBTN_PULLUP);
-ClickButton Button4(buttons[3].pin, LOW, CLICKBTN_PULLUP);
+ClickButton Button1(blinds[0].pin, LOW, CLICKBTN_PULLUP);
+ClickButton Button2(blinds[1].pin, LOW, CLICKBTN_PULLUP);
+ClickButton Button3(blinds[2].pin, LOW, CLICKBTN_PULLUP);
+ClickButton Button4(blinds[3].pin, LOW, CLICKBTN_PULLUP);
 
 /****************************************************************************************************************
 END variable definitions
@@ -182,7 +182,7 @@ void handleButtonClick (int button, int clickCount) {
   boolean currentState;
 
   // Get button type from button array
-  int buttonType = buttons[button - 1].type;
+  int buttonType = blinds[button - 1].type;
   Serial.print("Button: "); Serial.print(button); Serial.print(" Clicks: "); Serial.print(clickCount); Serial.print(" ButtonType: "); Serial.print(buttonType);
 
   // Remember current time to identify jalousie stop events later
@@ -191,13 +191,13 @@ void handleButtonClick (int button, int clickCount) {
   // Jalousie handling
   if (buttonType == 2) {
     // diff of current time and time of last update
-    diff = (int)currentTime - (int)buttons[button - 1].updated;
+    diff = (int)currentTime - (int)blinds[button - 1].updated;
   }
 
   // When button is pressed within offsetStopEvent ms, send message to stop GA
   if (buttonType == 2 && (diff < offsetStopEvent)) {
     stopMessage = true;
-    GA = buttons[button - 1].stopGA;
+    GA = blinds[button - 1].stopGA;
   }  else GA = getGA(button, clickCount);
 
   if (stopMessage) {
@@ -213,15 +213,15 @@ void handleButtonClick (int button, int clickCount) {
   if (stopMessage) {
 
     // forget timestamp when last message was a stop event
-    buttons[button - 1].updated = 0;
+    blinds[button - 1].updated = 0;
   } else {
-    buttons[button - 1].updated = currentTime;
+    blinds[button - 1].updated = currentTime;
   }
 
   sendKNXMessage_Value(GA, !currentState);
 
   // Update new state, unless its a stop message or the jalousie button which is not toggling states
-  if (!stopMessage && buttons[button - 1].type != 2) setState(button, clickCount, !currentState);
+  if (!stopMessage && blinds[button - 1].type != 2) setState(button, clickCount, !currentState);
 
 
   // for testing: send temp from DS18S20 to KNX
@@ -235,25 +235,25 @@ void handleButtonClick (int button, int clickCount) {
 
 // Get GA from button array according to how often the button was clicked
 String getGA (int button, int clickCount) {
-  if (clickCount == 1) return  buttons[button - 1].GA1;
-  else if (clickCount == 2) return  buttons[button - 1].GA2;
-  else if (clickCount == 3) return  buttons[button - 1].GA3;
-  else return  buttons[button - 1].GA1;
+  if (clickCount == 1) return  blinds[button - 1].GA1;
+  else if (clickCount == 2) return  blinds[button - 1].GA2;
+  else if (clickCount == 3) return  blinds[button - 1].GA3;
+  else return  blinds[button - 1].GA1;
 }
 
 // Get current button state from array according to how often the button was clicked
 boolean getState (int button, int clickCount) {
-  if (clickCount == 1) return  buttons[button - 1].stateGA1;
-  else if (clickCount == 2) return  buttons[button - 1].stateGA2;
-  else if (clickCount == 3) return  buttons[button - 1].stateGA3;
-  else return  buttons[button - 1].stateGA1;
+  if (clickCount == 1) return  blinds[button - 1].stateGA1;
+  else if (clickCount == 2) return  blinds[button - 1].stateGA2;
+  else if (clickCount == 3) return  blinds[button - 1].stateGA3;
+  else return  blinds[button - 1].stateGA1;
 }
 
 // Save new button state to array according to how often the button was clicked
 void setState (int button, int clickCount, boolean state) {
-  if (clickCount == 1) buttons[button - 1].stateGA1 = state;
-  else if (clickCount == 2) buttons[button - 1].stateGA2 = state;
-  else if (clickCount == 3) buttons[button - 1].stateGA3 = state;
+  if (clickCount == 1) blinds[button - 1].stateGA1 = state;
+  else if (clickCount == 2) blinds[button - 1].stateGA2 = state;
+  else if (clickCount == 3) blinds[button - 1].stateGA3 = state;
 }
 
 
