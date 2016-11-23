@@ -5,4 +5,4 @@ Using CentralLink you will be able to integrate your HomeServer (e.g. running on
 RoomController and CentralLink will be able to communicate bidirectional with your KNX system. You can send or receive telegrams and will be able to add custom actions.
 
 
-![alt text](https://github.com/northberlin/KNX/blob/master/Architecture_Level1.png "Architecture Overview")
+![alt text](https://github.com/BerlinBerlin/KNX/blob/master/Level1.png "Architecture Overview")
