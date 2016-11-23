@@ -1,4 +1,4 @@
-# Unleash your KNX System
+# Extend your KNX System with Arduino and Raspberry managed devices
 
 The RoomController will allow you to integrate custom Arduino devices, such as analogue switches, weather sensors, etc. into your KNX system.
 Using CentralLink you will be able to integrate your HomeServer (e.g. running on Raspberry) and radio transmissions into your KNX system. 
