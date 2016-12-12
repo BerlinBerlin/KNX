@@ -63,7 +63,7 @@ reedStruct reeds[] = {
   {21,  "0/4/0"},
   {222, "0/4/6"},
   {2,   "0/4/1"},
-  {-1,  "Last Element"}
+  { -1,  "Last Element"}
 };
 
 // Temp defintions
@@ -72,7 +72,7 @@ tempStruct temps[] = {
   {2,  "Thermostat_Bath_Clima",    "0/4/7", "0/4/8"},
   {3,  "Thermostat_Living_Clima",  "0/4/7", "0/4/8"},
   {4,  "Thermostat_Kitchen_Clima", "0/4/7", "0/4/8"},
-  {-1, "Last Element", "", ""}
+  { -1, "Last Element", "", ""}
 
 };
 
@@ -211,6 +211,12 @@ void handleMessage (String message) {
 }
 
 
+
+/****************************************************************************************************************
+START message processor section
+*****************************************************************************************************************/
+
+
 // This processor will observe KNX TDI messages. If the affected GA is inside the monitored reed contact array,
 // it will send a message to RPi
 void tdi_Processor (String message) {
@@ -306,16 +312,99 @@ void tdi_Processor (String message) {
 
 }
 
+
+
+// This method will handle thermostat updates received from FHEM and will forward it to the KNX bus serial
+void updateTemp_Processor(String message) {
+  Serial.println("Update temperature handler");
+
+  String thermostatID = message.substring(message.indexOf("NAME:") + 5,     message.indexOf("_TEMP:"));
+  String tempValue    = message.substring(message.indexOf("TEMP:") + 5,     message.length());
+
+  String GA_measuredTemp = "";
+
+
+  for (int i = 0; i < sizeof(temps) - 1; i++) {
+    if (temps[i].fhemID.equals(thermostatID)) {
+      GA_measuredTemp = temps[i].GA_measuredTemp;
+    }
+  }
+
+  Serial.print("Sending thermostat "); Serial.print(thermostatID); Serial.print(" change "); Serial.print(tempValue); Serial.print(" degree"); Serial.print(" to "); Serial.println(GA_measuredTemp);
+
+  float newTemp = tempValue.toFloat();
+  int value2DPT9 = Value2DPT9(newTemp * 100);
+  String hexTemp    = Dec2Hex(value2DPT9, 4);
+  String hex1 = "$" + hexTemp.substring(0, 2);
+  String hex2 = "$" + hexTemp.substring(2, 4);
+  sendKNXMessage_2Hex_Values(GA_measuredTemp, hex1, hex2);
+
+}
+
+
+/****************************************************************************************************************
+END message processor section
+*****************************************************************************************************************/
+
+/****************************************************************************************************************
+START interface section (SIMKNX, Raspberry Pi, Moteino)
+*****************************************************************************************************************/
+
+
+
+
 void sendKNXMessage_DPT9(String GA, float floatValue) {
-
-
   int value2DPT9 = Value2DPT9(floatValue * 100);
   String hexTemp    = Dec2Hex(value2DPT9, 4);
   String hex1 = "$" + hexTemp.substring(0, 2);
   String hex2 = "$" + hexTemp.substring(2, 4);
   sendKNXMessage_2Hex_Values(GA, hex1, hex2);
+}
+
+
+
+// Method to write something to the KNX bus serial
+void writeToKNXSerial_Processor(String output) {
+  // encode RPi command here and send out KNX message
+  sendKNXMessage_Value("1/1/1", 1);
+}
+
+
+// Send KNX telegram to SIMKNX module
+void sendKNXMessage_Value(String GA, int value) {
+}
+
+
+void sendKNXMessage_2Hex_Values(String GA, String hex1, String hex2) {
+  String output = "tds (" + GA + " $02) " + hex1 + " " + hex2;
+  Serial1.println(output);
+}
+
+
+// Method to write something to the RPi serial
+void writeToRpiSerial_Processor(String output) {
+  //nodeID=21 messageType=Reed vcc=4110 status=1 signal=-53
+  //Serial.print("Sending to Rpi: "); Serial.println(output);
+  Serial3.println(output);
+}
+
+// Method to write something to the Moteino serial
+void writeToMoteinoSerial_Processor(String output) {
+  Serial.print("Sending to Moteino serial:"); Serial.println(output);
+  Serial2.println(output);
+  //Serial2.print("sendCommand_TO:181_RETRIES:10_RETRYWAITTIME:5000_COMMAND:4_VALUE:HIGH@");
 
 }
+
+/****************************************************************************************************************
+END interface section (SIMKNX, Raspberry Pi, Moteino)
+*****************************************************************************************************************/
+
+
+
+/****************************************************************************************************************
+START utility functions
+*****************************************************************************************************************/
 
 
 String Dec2Hex(int dec, int hexDigits) {
@@ -426,60 +515,6 @@ int insideArray(String destination, int whichArray) {
 
 
 
-// Method to write something to the RPi serial
-void writeToRpiSerial_Processor(String output) {
-  //nodeID=21 messageType=Reed vcc=4110 status=1 signal=-53
-  //Serial.print("Sending to Rpi: "); Serial.println(output);
-  Serial3.println(output);
-}
-
-// Method to write something to the Moteino serial
-void writeToMoteinoSerial_Processor(String output) {
-  Serial.print("Sending to Moteino serial:"); Serial.println(output);
-  Serial2.println(output);
-  //Serial2.print("sendCommand_TO:181_RETRIES:10_RETRYWAITTIME:5000_COMMAND:4_VALUE:HIGH@");
-
-
-
-}
-
-
-
-// Method to write something to the KNX bus serial
-void writeToKNXSerial_Processor(String output) {
-  // encode RPi command here and send out KNX message
-  sendKNXMessage_Value("1/1/1", 1);
-}
-
-// This method will handle thermostat updates received from FHEM and will forward it to the KNX bus serial
-void updateTemp_Processor(String message) {
-
-  String thermostatID = message.substring(message.indexOf("NAME:") + 5,     message.indexOf("_TEMP:"));
-  String tempValue    = message.substring(message.indexOf("TEMP:") + 5,     message.length());
-
-  String GA_measuredTemp = "";
-
-
-  for (int i = 0; i < sizeof(temps) - 1; i++) {
-    if (temps[i].fhemID.equals(thermostatID)) {
-      GA_measuredTemp = temps[i].GA_measuredTemp;
-    }
-  }
-
-  Serial.print("Sending thermostat "); Serial.print(thermostatID); Serial.print(" change "); Serial.print(tempValue); Serial.print(" degree"); Serial.print(" to "); Serial.println(GA_measuredTemp);
-
-  float newTemp = tempValue.toFloat();
-  int value2DPT9 = Value2DPT9(newTemp * 100);
-  String hexTemp    = Dec2Hex(value2DPT9, 4);
-  String hex1 = "$" + hexTemp.substring(0, 2);
-  String hex2 = "$" + hexTemp.substring(2, 4);
-  sendKNXMessage_2Hex_Values(GA_measuredTemp, hex1, hex2);
-
-}
-
-
-
-
 // Helper method for GA transformation
 String HexGA2String (String hex) {
   return GroupAddr2Ets(Hex2Dec(hex));
@@ -511,14 +546,7 @@ String GroupAddr2Ets(int address)
   return ets;
 }
 
-
-// Send KNX telegram to SIMKNX module
-void sendKNXMessage_Value(String GA, int value) {
-}
-
-
-void sendKNXMessage_2Hex_Values(String GA, String hex1, String hex2) {
-  String output = "tds (" + GA + " $02) " + hex1 + " " + hex2;
-  Serial1.println(output);
-}
+/****************************************************************************************************************
+START utility functions
+*****************************************************************************************************************/
 
