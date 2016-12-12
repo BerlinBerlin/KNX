@@ -30,9 +30,10 @@ typedef struct
 // Struct definition of a temp record.
 typedef struct
 {
-  int id;              // Temp ID
-  String fhemID;       // FHEM ID of thermostat
-  String GA;           // GA
+  int id;                  // Temp ID
+  String fhemID;           // FHEM ID of thermostat
+  String GA_setTemp;       // Temp set from G1
+  String GA_measuredTemp;  // Temp measured from thermostat sent back to G1
 } tempStruct;
 
 
@@ -61,18 +62,25 @@ String commandArray[20];
 reedStruct reeds[] = {
   {21,  "0/4/0"},
   {222, "0/4/6"},
-  {2,   "0/4/1"}
+  {2,   "0/4/1"},
+  {-1,  "Last Element"}
 };
 
 // Temp defintions
 tempStruct temps[] = {
-  {1,  "Thermostat_Office_Clima",  "0/4/7"}
+  {1,  "Thermostat_Office_Clima",  "0/4/7", "0/4/8"},
+  {2,  "Thermostat_Bath_Clima",    "0/4/7", "0/4/8"},
+  {3,  "Thermostat_Living_Clima",  "0/4/7", "0/4/8"},
+  {4,  "Thermostat_Kitchen_Clima", "0/4/7", "0/4/8"},
+  {-1, "Last Element", "", ""}
+
 };
 
 // Positions defintions
 positionStruct positions[] = {
-  {1,  "0/7/3"},
-  {1,  "0/7/4"}
+  {1,   "0/7/3"},
+  {2,   "0/7/4"},
+  { -1, "Last Element"}
 };
 
 /****************************************************************************************************************
@@ -189,6 +197,8 @@ void handleMessage (String message) {
     tdi_Processor(message);
   } else if (message.startsWith("ivo")) {
     writeToKNXSerial_Processor(message);
+  } else if (message.startsWith("updateTemp")) {
+    updateTemp_Processor(message);
   } else if (message.startsWith("sendCommand")) {
     writeToMoteinoSerial_Processor(message);
   } else if (message.startsWith("nodeID=")) {
@@ -216,9 +226,9 @@ void tdi_Processor (String message) {
   Serial.print(" Length: "); Serial.print(length);
   Serial.print(" Data: "); Serial.println(data);
 
+  int currentPositionIndex = insideArray(HexGA2String(destination), 3);
   int currentReedIndex     = insideArray(HexGA2String(destination), 1);
   int currentTempIndex     = insideArray(HexGA2String(destination), 2);
-  int currentPositionIndex = insideArray(HexGA2String(destination), 3);
 
   if (currentReedIndex != -1) {
 
@@ -367,33 +377,43 @@ int Value2DPT9(int value)
 
 // Method to identify whether GA is in reed array or not
 int insideArray(String destination, int whichArray) {
+  int i = 0;
   switch (whichArray) {
     case 1:
-      for (int i = 0; i < sizeof(reeds) - 1; i++) {
-        if (reeds[i].GA.equals(destination)) {
+      while (true) {
+        if (reeds[i].id == -1) {
+          return -1;
+          break;
+        } else if (reeds[i].GA.equals(destination)) {
           return i;
+          break;
         }
+        i++;
       }
-      return -1;
-      break;
 
     case 2:
-      for (int i = 0; i < sizeof(temps) - 1; i++) {
-        if (temps[i].GA.equals(destination)) {
+      while (true) {
+        if (temps[i].id == -1) {
+          return -1;
+          break;
+        } else if (temps[i].GA_setTemp.equals(destination)) {
           return i;
+          break;
         }
+        i++;
       }
-      return -1;
-      break;
 
     case 3:
-      for (int i = 0; i < sizeof(positions) - 1; i++) {
-        if (positions[i].GA.equals(destination)) {
+      while (true) {
+        if (positions[i].id == -1) {
+          return -1;
+          break;
+        } else if (positions[i].GA.equals(destination)) {
           return i;
+          break;
         }
+        i++;
       }
-      return -1;
-      break;
 
     default:
       break;
@@ -430,6 +450,34 @@ void writeToKNXSerial_Processor(String output) {
   // encode RPi command here and send out KNX message
   sendKNXMessage_Value("1/1/1", 1);
 }
+
+// This method will handle thermostat updates received from FHEM and will forward it to the KNX bus serial
+void updateTemp_Processor(String message) {
+
+  String thermostatID = message.substring(message.indexOf("NAME:") + 5,     message.indexOf("_TEMP:"));
+  String tempValue    = message.substring(message.indexOf("TEMP:") + 5,     message.length());
+
+  String GA_measuredTemp = "";
+
+
+  for (int i = 0; i < sizeof(temps) - 1; i++) {
+    if (temps[i].fhemID.equals(thermostatID)) {
+      GA_measuredTemp = temps[i].GA_measuredTemp;
+    }
+  }
+
+  Serial.print("Sending thermostat "); Serial.print(thermostatID); Serial.print(" change "); Serial.print(tempValue); Serial.print(" degree"); Serial.print(" to "); Serial.println(GA_measuredTemp);
+
+  float newTemp = tempValue.toFloat();
+  int value2DPT9 = Value2DPT9(newTemp * 100);
+  String hexTemp    = Dec2Hex(value2DPT9, 4);
+  String hex1 = "$" + hexTemp.substring(0, 2);
+  String hex2 = "$" + hexTemp.substring(2, 4);
+  sendKNXMessage_2Hex_Values(GA_measuredTemp, hex1, hex2);
+
+}
+
+
 
 
 // Helper method for GA transformation
