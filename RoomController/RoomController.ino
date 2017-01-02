@@ -91,8 +91,9 @@ BlindControl blindButtons[] = {
 
 // Blind control button defintions
 LightControl lightButtons[] = {
-  {1, 50,  "0/2/0", "0/2/1", "0/2/2", 3, "0/2/3", "0/2/4", 0},
-  {2, 51,  "0/2/0", "0/2/1", "0/2/2", 3, "0/2/3", "0/2/4", 0}
+  {1,  50,  "0/2/0", "0/2/1", "0/2/2", 3, "0/2/3", "0/2/4", 0},
+  {2,  51,  "0/2/0", "0/2/1", "0/2/2", 3, "0/2/3", "0/2/4", 0},
+  { -1,  -1,  "", "", "", -1, "", "", -1} // Last Element
 };
 
 
@@ -110,6 +111,10 @@ END array definitions
 /****************************************************************************************************************
 START variable definitions
 *****************************************************************************************************************/
+
+// Array KNX commands from KNX sequences are getting stored in
+String commandArray[20];
+
 
 // Jalousie handling variables
 unsigned long currentTime;              // Variable to store the current time
@@ -162,31 +167,169 @@ void setup()
 
 void loop()
 {
-  // Update blind button state
+  // Blind button handling
   blindButton1.Update();
   blindButton2.Update();
   blindButton3.Update();
   blindButton4.Update();
-
-  // Handle blind button click events
   if (blindButton1.clicks != 0) handleBlindButtonClick(1, blindButton1.clicks);
   if (blindButton2.clicks != 0) handleBlindButtonClick(2, blindButton2.clicks);
   if (blindButton3.clicks != 0) handleBlindButtonClick(3, blindButton3.clicks);
   if (blindButton4.clicks != 0) handleBlindButtonClick(4, blindButton4.clicks);
 
 
-  // Update light button state
+  // Light button handling
   lightButton1.Update();
-
-  // Handle light button click events
   if (lightButton1.clicks != 0) handleLightButtonClick(1, lightButton1.clicks);
 
-
-
-  // Handle reed contacts, which is necessary for each defined reed
+  // Reed contacts handling
   handleReed(1, digitalRead(reeds[0].pin));
 
+  // Listening to KNX
+  if (Serial1.available() > 0) {
+    handleMessageSequence(Serial1.readString(), "KNX");
+  }
+
 }
+
+
+
+// This method will identify a sequence of commands, and will execute the handle message method for each of these commands
+void handleMessageSequence (String message, String serialSource) {
+  Serial.println("***************************************************************************************************");
+  message.trim();
+  Serial.print("Incomming transmission from "); Serial.print(serialSource); Serial.print(": ["); Serial.print(message); Serial.println("]");
+
+  String currentCommand;
+  String currentChar;
+  int pos = 0;
+
+  if (message.indexOf("\n") != -1) { // new line detected -> tokenize command sequence
+    Serial.println("Tokenizing sequence...");
+    for (int i = 0; i < message.length(); i++) {
+      currentChar = message.substring(i, i + 1);
+      if (currentChar != "\n") {
+        currentCommand += currentChar;
+      } else {
+        commandArray[pos] = currentCommand;
+        currentCommand = "";
+        pos++;
+      }
+    }
+    handleMessageArray();
+  } else {
+    handleMessage(message);
+  }
+}
+
+// This method will execute the handleMessage routine for every command in the array
+void handleMessageArray () {
+  for (int i = 0; i < 20 - 1; i++) {
+    if (commandArray[i] != "") {
+      Serial.print(i); Serial.println("--------------------------------------------------------");
+      handleMessage(commandArray[i]);
+    }
+  }
+}
+
+
+// Main method for message handling. Message processors can be linked here!
+void handleMessage (String message) {
+  // Remove linebreaks
+  message.trim();
+
+  Serial.print("Message: "); Serial.println(message);
+
+  if (message.startsWith("tdi") || message.startsWith("tdc")) {
+    tdi_Processor(message);
+  } else if (message.startsWith("ivo")) {
+    //writeToKNXSerial_Processor(message);
+  } else if (message.startsWith("updateTemp")) {
+    //updateTemp_Processor(message);
+  } else if (message.startsWith("sendCommand")) {
+    //writeToMoteinoSerial_Processor(message);
+  } else if (message.startsWith("nodeID=")) {
+    //writeToRpiSerial_Processor(message);
+  }
+  else {
+    Serial.println("No command handler found!");
+  }
+
+}
+
+// This processor will observe KNX TDI messages. If the affected GA is inside the monitored reed contact array,
+// it will send a message to RPi
+void tdi_Processor (String message) {
+  Serial.println("Transparent Data Indication (TDI) handler");
+  String source       = message.substring(6, 10);
+  String destination  = message.substring(12, 16);
+  String length       = message.substring(18, 20);
+  String data         = message.substring(23);
+  data.trim();
+
+  Serial.print("Source: "); Serial.print(source); Serial.print("="); Serial.print(HexGA2String(source));
+  Serial.print(" Destination: "); Serial.print(destination); Serial.print("="); Serial.print(HexGA2String(destination));
+  Serial.print(" Length: "); Serial.print(length);
+  Serial.print(" Data: "); Serial.println(data);
+
+
+  // If light GA is detected, then update the current GA status
+  updateLightButtonCurrentGA(HexGA2String(destination));
+
+}
+
+
+// This method will update all current GA pointers with a matching light GA
+void updateLightButtonCurrentGA (String GA) {
+  Serial.print("Destination: "); Serial.println(GA);
+  int i = 0;
+  while (true) {
+    if (lightButtons[i].id == -1) {
+      break;
+    } else if (lightButtons[i].lightGA1.equals(GA)) {
+      lightButtons[i].currentGA = 1;
+      Serial.print("ID:"); Serial.print(lightButtons[i].id); Serial.println(" Current GA:1");
+    } else if (lightButtons[i].lightGA2.equals(GA)) {
+      lightButtons[i].currentGA = 2;
+      Serial.print("ID:"); Serial.print(lightButtons[i].id); Serial.println(" Current GA:2");
+    } else if (lightButtons[i].lightOffGA.equals(GA)) {
+      lightButtons[i].currentGA = 3;
+      Serial.print("ID:"); Serial.print(lightButtons[i].id); Serial.println(" Current GA:3");
+    } else if (lightButtons[i].offGA_double.equals(GA)) {
+      lightButtons[i].currentGA = 3;
+      Serial.print("ID:"); Serial.print(lightButtons[i].id); Serial.println(" Current GA:3");
+    } else if (lightButtons[i].offGA_triple.equals(GA)) {
+      lightButtons[i].currentGA = 3;
+      Serial.print("ID:"); Serial.print(lightButtons[i].id); Serial.println(" Current GA:3");
+    }
+    i++;
+  }
+}
+
+
+// Helper method for GA transformation
+String HexGA2String (String hex) {
+  return GroupAddr2Ets(Hex2Dec(hex));
+
+}
+
+// Helper method for GA transformation
+int Hex2Dec(String hex) {
+  char hex_char[5];
+  hex.toCharArray(hex_char, 5) ;
+  long dec = strtol(hex_char, NULL, 16);
+  return dec;
+}
+
+// Helper method for GA transformation
+String GroupAddr2Ets(int address)
+{
+  String ets = "";
+  ets = String(int(address / 2048)) + "/" + String(int((address % 2048) / 256)) + "/" + String(int(address % 256));
+  return ets;
+}
+
+
 
 void handleReed (int reed, int currentState) {
   // Get last reed state from reed array
@@ -214,30 +357,22 @@ void handleLightButtonClick (int button, int clickCount) {
   int currentGA = lightButtons[button - 1].currentGA;
 
   if (clickCount == 1) {
-    if (currentGA == 1) {
+    if (currentGA == 1 and (!lightButtons[button - 1].lightGA2.equals(""))) {
       // Send ON to GA 2
       sendKNXMessage_Value(lightButtons[button - 1].lightGA2, 1);
-      // Set current GA to 1
-      lightButtons[button - 1].currentGA = 2;
-    } else if (currentGA == 2) {
-      // Send OFF to GA 3
-      sendKNXMessage_Value(lightButtons[button - 1].lightOffGA, 0);
-      // Set current GA to 3
-      lightButtons[button - 1].currentGA = 3;
-    } else {
+    } else if (currentGA == 3) {
       // Send ON to GA 1
       sendKNXMessage_Value(lightButtons[button - 1].lightGA1, 1);
-      // Set current GA to 1
-      lightButtons[button - 1].currentGA = 1;
+
+    } else {
+      // Send OFF to GA 3
+      sendKNXMessage_Value(lightButtons[button - 1].lightOffGA, 0);
+
     }
   } else if (clickCount == 2) {
     sendKNXMessage_Value(lightButtons[button - 1].offGA_double, 0);
-    // Set current GA to 1
-    lightButtons[button - 1].currentGA = 3;
   } else {
     sendKNXMessage_Value(lightButtons[button - 1].offGA_triple, 0);
-    // Set current GA to 1
-    lightButtons[button - 1].currentGA = 3;
   }
 
 }
