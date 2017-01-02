@@ -91,7 +91,7 @@ BlindControl blindButtons[] = {
 
 // Blind control button defintions
 LightControl lightButtons[] = {
-  {1,  50,  "0/2/0", "0/2/1", "0/2/2", 3, "0/2/3", "0/2/4", 0},
+  {1,  50,  "0/2/0", "", "0/2/2", 3, "0/2/3", "0/2/4", 0},
   {2,  51,  "0/2/0", "0/2/1", "0/2/2", 3, "0/2/3", "0/2/4", 0},
   { -1,  -1,  "", "", "", -1, "", "", -1} // Last Element
 };
@@ -99,8 +99,8 @@ LightControl lightButtons[] = {
 
 // Reed defintions arcording the buttton structure
 reedStruct reeds[] = {
-  {1, A8 , "0/4/0",  0},
-  {2, A13 , "0/0/1",  0}
+  {1, A8 , "0/4/0",  1},
+  {2, A13 , "0/0/1", 0}
 };
 
 /****************************************************************************************************************
@@ -189,6 +189,8 @@ void loop()
   if (Serial1.available() > 0) {
     handleMessageSequence(Serial1.readString(), "KNX");
   }
+
+  delay(10);
 
 }
 
@@ -369,6 +371,8 @@ void handleLightButtonClick (int button, int clickCount) {
       sendKNXMessage_Value(lightButtons[button - 1].lightOffGA, 0);
 
     }
+  } else if (clickCount == -1) {
+    sendKNXMessage_Value(lightButtons[button - 1].lightOffGA, 0);
   } else if (clickCount == 2) {
     sendKNXMessage_Value(lightButtons[button - 1].offGA_double, 0);
   } else {
