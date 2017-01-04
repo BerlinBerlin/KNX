@@ -52,13 +52,19 @@ typedef struct
 {
   int id;                     // Button ID
   int pin;                    // Pin the button is attached to Arduino, use a LOW active button --> connect GND to this pin when button is pressed
-  String lightGA1;            // GA for the first click
-  String lightGA2;            // GA for the next click
-  String lightOffGA;            // GA for the next click
+  String  GA1;                // GA1 for the first click
+  boolean GA1_value;          // GA1 value to be send
+  String  GA2;                // GA2 for the next click
+  boolean GA2_value;          // GA2 value to be send
+  String  GA3;                // GA3 for the next click
+  boolean GA3_value;          // GA3 value to be send
+  String  GADouble;           // GA when double click
+  boolean GADouble_value;     // GA value to be send for double click
+  String  GATriple;           // GA when triple click
+  boolean GATriple_value;     // GA value to be send for triple click
+  String  GALong;             // GA when long button press
+  boolean GALong_value;       // GA value to be send when long button press
   int currentGA;              // Which is the current GA switched on
-  String offGA_double;        // GA for switching of the lights when double click
-  String offGA_triple;       // GA for switching of the lights when tripple click
-  long updated;               // Timestamp of last update
 } LightControl ;
 
 // Struct definition of a reed record.
@@ -86,21 +92,23 @@ BlindControl blindButtons[] = {
   {1, 46,  "0/4/0", "0/0/2", "0/0/3", "",      0, 0, 0, 0},
   {2, 47,  "0/0/1", "0/0/2", "0/0/3", "",      0, 0, 0, 0},
   {3, 48,  "0/0/1", "0/0/2", "0/0/3", "3/3/3", 0, 0, 0, 0},
-  {4, A15, "0/0/1", "0/0/2", "0/0/3", "4/4/4", 0, 0, 0, 0}
+  {4, A15, "0/0/1", "0/0/2", "0/0/3", "4/4/4", 0, 0, 0, 0},
+  { -1, 0, "", "", "", "", 0, 0, 0, 0} // Last element
 };
 
 // Blind control button defintions
 LightControl lightButtons[] = {
-  {1,  50,  "0/2/0", "", "0/2/2", 3, "0/2/3", "0/2/4", 0},
-  {2,  51,  "0/2/0", "0/2/1", "0/2/2", 3, "0/2/3", "0/2/4", 0},
-  { -1,  -1,  "", "", "", -1, "", "", -1} // Last Element
+  //ID, PIN, GA1, GA1_value, GA2, GA2_value, GA3, GA3_value, GADouble, GADouble_value, GATriple, GATriple_value, GALong, GALong_value
+  {1,  50,  "0/2/0", 1, "0/2/1", 1, "0/2/2", 0, "0/2/3", 0, "0/2/4", 0, "0/2/4", 0, 0},
+  {2,  51,  "0/2/0", 0, "0/2/1", 0, "0/2/2", 0, "0/2/3", 0, "0/2/4", 0, "0/2/4", 0, 0},
+  {-1,  0, "", 0, "", 0, "", 0, "", 0, "", 0, "", 0, 0} // Last element
 };
-
 
 // Reed defintions arcording the buttton structure
 reedStruct reeds[] = {
   {1, A8 , "0/4/0",  1},
-  {2, A13 , "0/0/1", 0}
+  {2, A13, "0/0/1", 0},
+  { -1, 0, "", 0} // Last element
 };
 
 /****************************************************************************************************************
@@ -152,10 +160,11 @@ END variable definitions
 void setup()
 {
   // Open serial USB
-  Serial.begin(9600);
+  Serial.begin(38400);
 
   // Open serial KNX
-  Serial1.begin(9600);
+  //Serial1.begin(9600);
+  Serial1.begin(38400);
 
   // Instantiate all reeds from array
   for (i = 0; i < sizeof(reeds); i++) {
@@ -180,7 +189,7 @@ void loop()
 
   // Light button handling
   lightButton1.Update();
-  if (lightButton1.clicks != 0) handleLightButtonClick(1, lightButton1.clicks);
+  if (lightButton1.clicks != 0) handleLightButtonClick(0, lightButton1.clicks);
 
   // Reed contacts handling
   handleReed(1, digitalRead(reeds[0].pin));
@@ -189,8 +198,6 @@ void loop()
   if (Serial1.available() > 0) {
     handleMessageSequence(Serial1.readString(), "KNX");
   }
-
-  delay(10);
 
 }
 
@@ -259,6 +266,11 @@ void handleMessage (String message) {
 
 }
 
+/****************************************************************************************************************
+START message processor section
+*****************************************************************************************************************/
+
+
 // This processor will observe KNX TDI messages. If the affected GA is inside the monitored reed contact array,
 // it will send a message to RPi
 void tdi_Processor (String message) {
@@ -281,58 +293,69 @@ void tdi_Processor (String message) {
 }
 
 
-// This method will update all current GA pointers with a matching light GA
-void updateLightButtonCurrentGA (String GA) {
-  Serial.print("Destination: "); Serial.println(GA);
-  int i = 0;
-  while (true) {
-    if (lightButtons[i].id == -1) {
-      break;
-    } else if (lightButtons[i].lightGA1.equals(GA)) {
-      lightButtons[i].currentGA = 1;
-      Serial.print("ID:"); Serial.print(lightButtons[i].id); Serial.println(" Current GA:1");
-    } else if (lightButtons[i].lightGA2.equals(GA)) {
-      lightButtons[i].currentGA = 2;
-      Serial.print("ID:"); Serial.print(lightButtons[i].id); Serial.println(" Current GA:2");
-    } else if (lightButtons[i].lightOffGA.equals(GA)) {
-      lightButtons[i].currentGA = 3;
-      Serial.print("ID:"); Serial.print(lightButtons[i].id); Serial.println(" Current GA:3");
-    } else if (lightButtons[i].offGA_double.equals(GA)) {
-      lightButtons[i].currentGA = 3;
-      Serial.print("ID:"); Serial.print(lightButtons[i].id); Serial.println(" Current GA:3");
-    } else if (lightButtons[i].offGA_triple.equals(GA)) {
-      lightButtons[i].currentGA = 3;
-      Serial.print("ID:"); Serial.print(lightButtons[i].id); Serial.println(" Current GA:3");
+
+/******************************************************************************
+handleLightButtonClick - This method is handling light button click events.
+
+It will rotate between 3 GAs for single clicks according the currentGA pointer.
+GA1->GA2->GA3
+
+Double click will send telegram to GADouble adress
+Triple click will send telegram to GATriple adress
+
+Values of each telegram is either 0 or 1 as configured in the array definition
+
+*******************************************************************************/
+void handleLightButtonClick (int buttonIndex, int clickCount) {
+  Serial.println("***************************************************************************************************");
+  Serial.print("LightButton: "); Serial.print(buttonIndex); Serial.print(" Clicks: "); Serial.println(clickCount); //Serial.print(" ButtonType: "); Serial.print(buttonType);
+
+  // Get current GA
+  int currentGA = lightButtons[buttonIndex].currentGA;
+
+
+  // When single click, do GA rotation GA1>GA2>GA3>GA1>...
+  if (clickCount == 1) {
+
+    // When current GA = 1 and GA2 is defined > send GA2 telegram
+    if (currentGA == 1 and (!lightButtons[buttonIndex].GA2.equals(""))) {
+      // Send GA2 telegram
+      sendKNXMessage_Value(lightButtons[buttonIndex].GA2, lightButtons[buttonIndex].GA2_value);
+
+    // When current GA = 2 and GA3 is defined > send GA3 telegram
+    } else if (currentGA == 2 and (!lightButtons[buttonIndex].GA3.equals(""))) {
+      // Send GA3 telegram
+      sendKNXMessage_Value(lightButtons[buttonIndex].GA3, lightButtons[buttonIndex].GA3_value);
+
+    // All other cases return rotation to GA = 1 > send GA1 telegram
+    } else {
+      // Send GA1 telegram
+      sendKNXMessage_Value(lightButtons[buttonIndex].GA1, lightButtons[buttonIndex].GA1_value);
     }
-    i++;
+  } 
+  
+  // When double click > send GADouble telegram
+  else if (clickCount == 2) {
+    // Send GADouble telegram
+    sendKNXMessage_Value(lightButtons[buttonIndex].GADouble, lightButtons[buttonIndex].GADouble_value);
   }
+
+  // When triple click > send GATriple telegram
+  else if (clickCount == 3) {
+    // Send GATriple telegram
+    sendKNXMessage_Value(lightButtons[buttonIndex].GATriple, lightButtons[buttonIndex].GATriple_value);
+  }
+
+  // When long button press > send GALong telegram
+  else if (clickCount == -1) {
+    // Send GALong telegram
+    sendKNXMessage_Value(lightButtons[buttonIndex].GALong, lightButtons[buttonIndex].GALong_value);
+  }
+
 }
 
 
-// Helper method for GA transformation
-String HexGA2String (String hex) {
-  return GroupAddr2Ets(Hex2Dec(hex));
-
-}
-
-// Helper method for GA transformation
-int Hex2Dec(String hex) {
-  char hex_char[5];
-  hex.toCharArray(hex_char, 5) ;
-  long dec = strtol(hex_char, NULL, 16);
-  return dec;
-}
-
-// Helper method for GA transformation
-String GroupAddr2Ets(int address)
-{
-  String ets = "";
-  ets = String(int(address / 2048)) + "/" + String(int((address % 2048) / 256)) + "/" + String(int(address % 256));
-  return ets;
-}
-
-
-
+// Needs rework
 void handleReed (int reed, int currentState) {
   // Get last reed state from reed array
   int lastState = reeds[reed - 1].state;
@@ -352,35 +375,10 @@ void handleReed (int reed, int currentState) {
   }
 }
 
-void handleLightButtonClick (int button, int clickCount) {
-  Serial.print("LightButton: "); Serial.print(button); Serial.print(" Clicks: "); Serial.println(clickCount); //Serial.print(" ButtonType: "); Serial.print(buttonType);
 
-  // Get current GA
-  int currentGA = lightButtons[button - 1].currentGA;
 
-  if (clickCount == 1) {
-    if (currentGA == 1 and (!lightButtons[button - 1].lightGA2.equals(""))) {
-      // Send ON to GA 2
-      sendKNXMessage_Value(lightButtons[button - 1].lightGA2, 1);
-    } else if (currentGA == 3) {
-      // Send ON to GA 1
-      sendKNXMessage_Value(lightButtons[button - 1].lightGA1, 1);
 
-    } else {
-      // Send OFF to GA 3
-      sendKNXMessage_Value(lightButtons[button - 1].lightOffGA, 0);
-
-    }
-  } else if (clickCount == -1) {
-    sendKNXMessage_Value(lightButtons[button - 1].lightOffGA, 0);
-  } else if (clickCount == 2) {
-    sendKNXMessage_Value(lightButtons[button - 1].offGA_double, 0);
-  } else {
-    sendKNXMessage_Value(lightButtons[button - 1].offGA_triple, 0);
-  }
-
-}
-
+// Need rework!!
 void handleBlindButtonClick (int button, int clickCount) {
   // Which button was pressed? --> button
   // How often the button was pressed? -> clickCount
@@ -388,8 +386,6 @@ void handleBlindButtonClick (int button, int clickCount) {
   boolean stopMessage = false;
   boolean currentState;
 
-  // Get button type from button array
-  //int buttonType = blinds[button - 1].type;
   Serial.print("BlindButton: "); Serial.print(button); Serial.print(" Clicks: "); Serial.print(clickCount); //Serial.print(" ButtonType: "); Serial.print(buttonType);
 
   // Remember current time to identify jalousie stop events later
@@ -435,12 +431,118 @@ void handleBlindButtonClick (int button, int clickCount) {
 
 
   // for testing: send temp from DS18S20 to KNX
-  Serial.println("Handling temp");
-  handleTemp();
+  //Serial.println("Handling temp");
+  //handleTemp();
 
 
 
 }
+
+
+/****************************************************************************************************************
+END message processor section
+*****************************************************************************************************************/
+
+
+
+/****************************************************************************************************************
+START KNX listener section
+*****************************************************************************************************************/
+
+
+// This method will update all current GA pointers with a matching light GA
+void updateLightButtonCurrentGA (String GA) {
+  Serial.print("Destination: "); Serial.println(GA);
+  int i = 0;
+  while (true) {
+    if (lightButtons[i].id == -1) {
+      break;
+    } else if (lightButtons[i].GA1.equals(GA)) {
+      lightButtons[i].currentGA = 1;
+      //Serial.print("ID:"); Serial.print(lightButtons[i].id); Serial.println(" Current GA:1");
+    } else if (lightButtons[i].GA2.equals(GA)) {
+      lightButtons[i].currentGA = 2;
+      //Serial.print("ID:"); Serial.print(lightButtons[i].id); Serial.println(" Current GA:2");
+    } else if (lightButtons[i].GA3.equals(GA)) {
+      lightButtons[i].currentGA = 3;
+      //Serial.print("ID:"); Serial.print(lightButtons[i].id); Serial.println(" Current GA:3");
+    } else if (lightButtons[i].GADouble.equals(GA)) {
+      lightButtons[i].currentGA = 3;
+      //Serial.print("ID:"); Serial.print(lightButtons[i].id); Serial.println(" Current GA:3");
+    } else if (lightButtons[i].GATriple.equals(GA)) {
+      lightButtons[i].currentGA = 3;
+      //Serial.print("ID:"); Serial.print(lightButtons[i].id); Serial.println(" Current GA:3");
+    }
+    i++;
+  }
+}
+
+/****************************************************************************************************************
+END KNX listener section
+*****************************************************************************************************************/
+
+
+/****************************************************************************************************************
+START interface section (SIMKNX)
+*****************************************************************************************************************/
+
+
+void sendKNXMessage_2Hex_Values(String GA, String hex1, String hex2) {
+  String output = "tds (" + GA + " $02) " + hex1 + " " + hex2;
+  Serial.print("Sending:"); Serial.println(output);
+  Serial1.println(output);
+  
+}
+
+// Send KNX telegram to SIMKNX module
+void sendKNXMessage_Value(String GA, int value) {
+  String output = "tds (" + GA + ") " + value;
+  Serial.print("Sending:"); Serial.println(output);
+  Serial1.println(output);
+
+  //Serial.println("Setting Baud rate to 38400");
+  //Serial1.println("ids (5 50) $51 $00");
+
+}
+
+/****************************************************************************************************************
+END interface section (SIMKNX)
+*****************************************************************************************************************/
+
+
+
+
+
+/****************************************************************************************************************
+START utility functions
+*****************************************************************************************************************/
+
+
+
+// Helper method for GA transformation
+String HexGA2String (String hex) {
+  return GroupAddr2Ets(Hex2Dec(hex));
+
+}
+
+// Helper method for GA transformation
+int Hex2Dec(String hex) {
+  char hex_char[5];
+  hex.toCharArray(hex_char, 5) ;
+  long dec = strtol(hex_char, NULL, 16);
+  return dec;
+}
+
+// Helper method for GA transformation
+String GroupAddr2Ets(int address)
+{
+  String ets = "";
+  ets = String(int(address / 2048)) + "/" + String(int((address % 2048) / 256)) + "/" + String(int(address % 256));
+  return ets;
+}
+
+
+
 
 
 // Get GA from button array according to how often the button was clicked
@@ -573,16 +675,8 @@ String Dec2Hex(int dec, int hexDigits) {
   return hex;
 }
 
-void sendKNXMessage_2Hex_Values(String GA, String hex1, String hex2) {
-  String output = "tds (" + GA + " $02) " + hex1 + " " + hex2;
-  Serial.print("Sending:"); Serial.println(output);
-  Serial1.println(output);
-}
 
-// Send KNX telegram to SIMKNX module
-void sendKNXMessage_Value(String GA, int value) {
-  String output = "tds (" + GA + ") " + value;
-  Serial.print("Sending:"); Serial.println(output);
-  Serial1.println(output);
+/****************************************************************************************************************
+END utility functions
+*****************************************************************************************************************/
 
-}
