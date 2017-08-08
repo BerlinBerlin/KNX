@@ -1,9 +1,9 @@
 /****************************************************************************************************************
-CentralLink
+  CentralLink
 
-HW: Arduino Mega 2560
+  HW: Arduino Mega 2560
 
-Features:
+  Features:
   - Listenting to KNX Bus   on serial 1
   - Listenting to Moteino   on serial 2
   - Listenting to Raspberry on serial 3
@@ -16,7 +16,7 @@ Features:
 
 
 /****************************************************************************************************************
-START struct definitions
+  START struct definitions
 *****************************************************************************************************************/
 
 // Struct definition of a reed record.
@@ -32,8 +32,8 @@ typedef struct
 {
   int id;                  // Temp ID
   String fhemID;           // FHEM ID of thermostat
-  String GA_setTemp;       // Temp set from G1
-  String GA_measuredTemp;  // Temp measured from thermostat sent back to G1
+  String GA_measuredTemp;  // Temp measured
+  String GA_setTemp;       // Set temp
 } tempStruct;
 
 
@@ -44,19 +44,37 @@ typedef struct
   String GA;           // GA
 } positionStruct;
 
+
+
+// Struct definition of a Sonos object.
+typedef struct
+{
+  int id;              // Sonos ID
+  String GA;           // GA
+  String SonosName;    // Name of Sonos speaker
+} sonosStruct;
+
+
 /****************************************************************************************************************
-END struct definitions
+  END struct definitions
 *****************************************************************************************************************/
 
 
 
 /****************************************************************************************************************
-START array definitions
+  START array definitions
 *****************************************************************************************************************/
 
 // Array KNX commands from KNX sequences are getting stored in
 String commandArray[20];
 
+
+// Sonos defintions
+sonosStruct sonos[] = {
+  {1,  "10/3/0", "Office"},
+  {2,  "10/3/1", "Küche"},
+  { -1,  "Last Element"}
+};
 
 // Reed defintions
 reedStruct reeds[] = {
@@ -68,10 +86,10 @@ reedStruct reeds[] = {
 
 // Temp defintions
 tempStruct temps[] = {
-  {1,  "Thermostat_Office_Clima",  "0/4/7", "0/4/8"},
-  {2,  "Thermostat_Bath_Clima",    "0/4/7", "0/4/8"},
-  {3,  "Thermostat_Living_Clima",  "0/4/7", "0/4/8"},
-  {4,  "Thermostat_Kitchen_Clima", "0/4/7", "0/4/8"},
+  //{1,  "Thermostat_Office_Clima",  "11/0/1", "10/0/0"},
+  {2,  "Thermostat_Bath_Clima",    "10/0/0", "10/0/1"},
+  {3,  "Thermostat_Living_Clima",  "10/0/2", "10/0/3"},
+  {4,  "Thermostat_Kitchen_Clima", "10/0/4", "10/0/5"},
   { -1, "Last Element", "", ""}
 
 };
@@ -84,19 +102,19 @@ positionStruct positions[] = {
 };
 
 /****************************************************************************************************************
-END array definitions
+  END array definitions
 *****************************************************************************************************************/
 
 
 /****************************************************************************************************************
-START variable definitions
+  START variable definitions
 *****************************************************************************************************************/
 
 // Clear moteino buffer when powering up
 String currentMoteinoReading = "";
 
 /****************************************************************************************************************
-END variable definitions
+  END variable definitions
 *****************************************************************************************************************/
 
 
@@ -213,7 +231,7 @@ void handleMessage (String message) {
 
 
 /****************************************************************************************************************
-START message processor section
+  START message processor section
 *****************************************************************************************************************/
 
 
@@ -232,9 +250,10 @@ void tdi_Processor (String message) {
   Serial.print(" Length: "); Serial.print(length);
   Serial.print(" Data: "); Serial.println(data);
 
-  int currentPositionIndex = insideArray(HexGA2String(destination), 3);
   int currentReedIndex     = insideArray(HexGA2String(destination), 1);
   int currentTempIndex     = insideArray(HexGA2String(destination), 2);
+  int currentPositionIndex = insideArray(HexGA2String(destination), 3);
+  int currentSonosIndex    = insideArray(HexGA2String(destination), 4);
 
   if (currentReedIndex != -1) {
 
@@ -303,10 +322,30 @@ void tdi_Processor (String message) {
     Serial.print("This position object with ID="); Serial.print(positions[currentPositionIndex].id);
     Serial.print(" is monitored -> Position: "); Serial.print(pos); Serial.print(" "); Serial.print(posPercent); Serial.println("%");
 
+
+  }
+
+  else if (currentSonosIndex != -1) {
+    String data1 = data.substring(0, 2);
+    String data2 = data.substring(4, 6);
+
+    int dec = Hex2Dec(data1 + data2);
+
+    //int pos        = DPT9ToValue(dec);
+    //int posPercent = (DPT9ToValue(dec) * 100) / 255 + 1;
+
+    Serial.print("This Sonos object with ID="); Serial.print(sonos[currentSonosIndex].id);
+    Serial.print(" is monitored -> "); Serial.print(sonos[currentSonosIndex].SonosName); Serial.print(" -> "); Serial.println(dec);
+
+    // Send Sonos command to Raspberry
+    writeToRpiSerial_Processor("SetSonos " + sonos[currentSonosIndex].SonosName + " " + dec);
+
+
   }
 
   else {
     Serial.println("This KNX address is NOT supervised");
+
 
   }
 
@@ -343,11 +382,11 @@ void updateTemp_Processor(String message) {
 
 
 /****************************************************************************************************************
-END message processor section
+  END message processor section
 *****************************************************************************************************************/
 
 /****************************************************************************************************************
-START interface section (SIMKNX, Raspberry Pi, Moteino)
+  START interface section (SIMKNX, Raspberry Pi, Moteino)
 *****************************************************************************************************************/
 
 
@@ -397,13 +436,13 @@ void writeToMoteinoSerial_Processor(String output) {
 }
 
 /****************************************************************************************************************
-END interface section (SIMKNX, Raspberry Pi, Moteino)
+  END interface section (SIMKNX, Raspberry Pi, Moteino)
 *****************************************************************************************************************/
 
 
 
 /****************************************************************************************************************
-START utility functions
+  START utility functions
 *****************************************************************************************************************/
 
 
@@ -504,6 +543,19 @@ int insideArray(String destination, int whichArray) {
         i++;
       }
 
+    case 4:
+      while (true) {
+        if (sonos[i].id == -1) {
+          return -1;
+          break;
+        } else if (sonos[i].GA.equals(destination)) {
+          return i;
+          break;
+        }
+        i++;
+      }
+
+
     default:
       break;
 
@@ -547,6 +599,6 @@ String GroupAddr2Ets(int address)
 }
 
 /****************************************************************************************************************
-END utility functions
+  END utility functions
 *****************************************************************************************************************/
 
